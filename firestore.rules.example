@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /priceCards/{docId} {
+      // 社内だけで使う場合は、Firebase Authenticationと組み合わせて
+      // request.auth != null に変更することを推奨します。
+      allow read, write: if false;
+    }
+  }
+}
