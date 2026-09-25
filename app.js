@@ -132,8 +132,12 @@
     printAll.disabled = !has;
   }
 
+  const PXPMM = 1400/91; // px-per-mm resolution used for print-quality canvases
+
   function getCanvasSize(){
-    return ratioSelect.value === 'square' ? {w:1200,h:1200} : {w:1400,h:846};
+    return ratioSelect.value === 'square'
+      ? {w:1200,h:1200}
+      : {w:Math.round(105*PXPMM), h:Math.round(145*PXPMM)};
   }
 
   function computeGlobalSizes(){
@@ -248,7 +252,19 @@
   };
 
   printAll.onclick = () => {
-    printArea.innerHTML=''; products.forEach(p=>printArea.appendChild(createCardCanvas(p))); window.print();
+    printArea.innerHTML = '';
+    const {w,h} = getCanvasSize();
+    const wMM = +(w/PXPMM).toFixed(2);
+    const hMM = +(h/PXPMM).toFixed(2);
+    const availW = 196, gapCol = 8, gapRow = 4; // A4 portrait minus 7mm margins
+    const cols = Math.max(1, Math.floor((availW+gapCol)/(wMM+gapCol)));
+    const totalWMM = cols*wMM + (cols-1)*gapCol;
+    document.documentElement.style.setProperty('--card-w-mm', wMM+'mm');
+    document.documentElement.style.setProperty('--card-h-mm', hMM+'mm');
+    document.documentElement.style.setProperty('--print-cols', cols);
+    printArea.style.width = totalWMM+'mm';
+    products.forEach(p=>printArea.appendChild(createCardCanvas(p)));
+    window.print();
   };
 
   searchInput.oninput=renderAll;
