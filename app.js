@@ -174,7 +174,7 @@
 
     const codePx = Number(codeSize.value) * (w/420);
     ctx.fillStyle=secondary; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
-    ctx.font=`500 ${codePx}px Georgia,"Times New Roman",serif`;
+    ctx.font=`500 ${codePx}px "Times New Roman",Times,serif`;
     ctx.fillText(p.code || '',m*1.9,h*0.155);
 
     if(blue){
@@ -189,10 +189,10 @@
     const titleY = ratioSelect.value==='square' ? h*0.38 : h*0.43;
     ctx.fillText(p.jp,w/2,titleY);
 
-    ctx.fillStyle=secondary; ctx.font=`500 ${54*(w/1400)}px Georgia,"Times New Roman",serif`;
+    ctx.fillStyle=secondary; ctx.font=`500 ${54*(w/1400)}px "Times New Roman",Times,serif`;
     const en = p.en || '';
     const enSize = globalEnSize ?? fitLatin(ctx,en,w-m*3,54*(w/1400),28*(w/1400));
-    ctx.font=`500 ${enSize}px Georgia,"Times New Roman",serif`;
+    ctx.font=`500 ${enSize}px "Times New Roman",Times,serif`;
     const enY=ratioSelect.value==='square'?h*0.49:h*0.56;
     ctx.fillText(en,w/2,enY);
 
@@ -205,7 +205,7 @@
     const pp = Number(priceSize.value)*(w/420);
     const priceText=`¥${money(p.price)}`;
     const priceY = ratioSelect.value==='square'?h*0.78:h*0.82;
-    ctx.font=`700 ${pp}px Georgia,"Times New Roman",serif`;
+    ctx.font=`700 ${pp}px "Times New Roman",Times,serif`;
     ctx.fillStyle='#d40000'; ctx.textAlign='center';
     const priceWidth=ctx.measureText(priceText).width;
     const taxFont=42*(w/1400);
@@ -213,17 +213,17 @@
     const taxW=ctx.measureText('（税込）').width;
     const totalW=priceWidth+taxW+24*(w/1400);
     let startX=(w-totalW)/2;
-    ctx.font=`700 ${pp}px Georgia,"Times New Roman",serif`; ctx.textAlign='left';ctx.fillStyle='#d40000';
+    ctx.font=`700 ${pp}px "Times New Roman",Times,serif`; ctx.textAlign='left';ctx.fillStyle='#d40000';
     ctx.fillText(priceText,startX,priceY);
     ctx.font=`700 ${taxFont}px "Yu Mincho","Hiragino Mincho ProN",serif`;ctx.fillStyle='#050505';
     ctx.fillText('（税込）',startX+priceWidth+20*(w/1400),priceY-5*(w/1400));
 
-    ctx.font=`500 ${34*(w/1400)}px Georgia,"Times New Roman",serif`;ctx.fillStyle=secondary;ctx.textAlign='right';
+    ctx.font=`500 ${34*(w/1400)}px "Times New Roman",Times,serif`;ctx.fillStyle=secondary;ctx.textAlign='right';
     ctx.fillText('Tax included',w-m*1.7,h-m*1.35);
   }
 
   function fitLatin(ctx,text,maxWidth,maxSize,minSize){
-    let size=maxSize; while(size>minSize){ctx.font=`500 ${size}px Georgia,"Times New Roman",serif`;if(ctx.measureText(text).width<=maxWidth)break;size-=2;}return size;
+    let size=maxSize; while(size>minSize){ctx.font=`500 ${size}px "Times New Roman",Times,serif`;if(ctx.measureText(text).width<=maxWidth)break;size-=2;}return size;
   }
 
   function escapeHtml(s){ return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
