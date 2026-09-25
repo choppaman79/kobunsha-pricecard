@@ -1,394 +1,267 @@
-const MM_TO_IN = 1 / 25.4;
-const DPI = 300;
-const SIZES = {
-  business: { mmW: 91, mmH: 55 },
-  a7: { mmW: 105, mmH: 74 }
-};
+(() => {
+  const $ = id => document.getElementById(id);
+  const excelFile = $('excelFile');
+  const dropzone = $('dropzone');
+  const tableBody = $('productTable');
+  const cardGrid = $('cardGrid');
+  const countText = $('countText');
+  const searchInput = $('searchInput');
+  const designSelect = $('designSelect');
+  const ratioSelect = $('ratioSelect');
+  const codeSize = $('codeSize');
+  const codeSizeOut = $('codeSizeOut');
+  const priceSize = $('priceSize');
+  const priceSizeOut = $('priceSizeOut');
+  const status = $('status');
+  const clearBtn = $('clearBtn');
+  const downloadSelected = $('downloadSelected');
+  const downloadAll = $('downloadAll');
+  const printAll = $('printAll');
+  const printArea = $('printArea');
 
-const els = {
-  imageInput: document.getElementById('imageInput'),
-  jpName: document.getElementById('jpName'),
-  enName: document.getElementById('enName'),
-  price: document.getElementById('price'),
-  taxMode: document.getElementById('taxMode'),
-  template: document.getElementById('template'),
-  cardSize: document.getElementById('cardSize'),
-  imageLayout: document.getElementById('imageLayout'),
-  imageFit: document.getElementById('imageFit'),
-  canvas: document.getElementById('cardCanvas'),
-  exportBtn: document.getElementById('exportBtn'),
-  printBtn: document.getElementById('printBtn'),
-  resetBtn: document.getElementById('resetBtn'),
-  saveProductBtn: document.getElementById('saveProductBtn'),
-  refreshProductsBtn: document.getElementById('refreshProductsBtn'),
-  productSelect: document.getElementById('productSelect'),
-  status: document.getElementById('status'),
-};
+  let products = [];
+  let filtered = [];
+  let selectedIndex = -1;
+  let globalJpSize = null;
+  let globalEnSize = null;
 
-let productImage = null;
-let productImageDataUrl = '';
-let firebaseApi = null;
-
-function pxFromMm(mm) {
-  return Math.round(mm * MM_TO_IN * DPI);
-}
-
-function setupCanvas() {
-  const s = SIZES[els.cardSize.value];
-  els.canvas.width = pxFromMm(s.mmW);
-  els.canvas.height = pxFromMm(s.mmH);
-}
-
-function roundedRect(ctx, x, y, w, h, r) {
-  const rr = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + rr, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rr);
-  ctx.arcTo(x + w, y + h, x, y + h, rr);
-  ctx.arcTo(x, y + h, x, y, rr);
-  ctx.arcTo(x, y, x + w, y, rr);
-  ctx.closePath();
-}
-
-function drawFittedImage(ctx, img, x, y, w, h, fit = 'contain') {
-  const ir = img.width / img.height;
-  const rr = w / h;
-  let dw, dh;
-  if ((fit === 'contain' && ir > rr) || (fit === 'cover' && ir < rr)) {
-    dw = w;
-    dh = w / ir;
-  } else {
-    dh = h;
-    dw = h * ir;
-  }
-  const dx = x + (w - dw) / 2;
-  const dy = y + (h - dh) / 2;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, w, h);
-  ctx.clip();
-  ctx.drawImage(img, dx, dy, dw, dh);
-  ctx.restore();
-}
-
-function fontSizeToFit(ctx, text, maxWidth, startSize, minSize, fontFamily, weight = 700) {
-  let size = startSize;
-  while (size > minSize) {
-    ctx.font = `${weight} ${size}px ${fontFamily}`;
-    if (ctx.measureText(text).width <= maxWidth) break;
-    size -= 2;
-  }
-  return size;
-}
-
-function formatPrice(value) {
-  const n = Number(value || 0);
-  return `¥${n.toLocaleString('ja-JP')}`;
-}
-
-function drawSimple(ctx, W, H) {
-  const pad = Math.round(W * 0.028);
-  const gold = '#a87921';
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = gold;
-  ctx.lineWidth = Math.max(3, W * 0.0035);
-  ctx.strokeRect(pad, pad, W - pad * 2, H - pad * 2);
-
-  const isLeft = els.imageLayout.value === 'left';
-  let imageBox, textBox;
-  if (isLeft) {
-    imageBox = { x: pad * 1.8, y: pad * 1.8, w: W * 0.49, h: H - pad * 3.6 };
-    textBox = { x: W * 0.55, y: pad * 2.0, w: W * 0.41, h: H - pad * 4 };
-  } else {
-    imageBox = { x: pad * 1.8, y: pad * 1.7, w: W - pad * 3.6, h: H * 0.50 };
-    textBox = { x: pad * 2.2, y: H * 0.57, w: W - pad * 4.4, h: H * 0.35 };
-  }
-
-  if (productImage) drawFittedImage(ctx, productImage, imageBox.x, imageBox.y, imageBox.w, imageBox.h, els.imageFit.value);
-
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const cx = textBox.x + textBox.w / 2;
-
-  const jpFont = '"Yu Mincho", "Hiragino Mincho ProN", serif';
-  const enFont = 'Georgia, "Times New Roman", serif';
-  const priceFont = 'Georgia, "Times New Roman", serif';
-
-  const jpSize = fontSizeToFit(ctx, els.jpName.value, textBox.w * 0.96, H * (isLeft ? 0.14 : 0.10), H * 0.06, jpFont, 700);
-  ctx.font = `700 ${jpSize}px ${jpFont}`;
-  ctx.fillStyle = '#111111';
-  ctx.fillText(els.jpName.value, cx, textBox.y + textBox.h * 0.19);
-
-  ctx.strokeStyle = gold;
-  ctx.lineWidth = Math.max(2, W * 0.0018);
-  ctx.beginPath();
-  ctx.moveTo(textBox.x + textBox.w * 0.08, textBox.y + textBox.h * 0.34);
-  ctx.lineTo(textBox.x + textBox.w * 0.92, textBox.y + textBox.h * 0.34);
-  ctx.stroke();
-
-  const enSize = fontSizeToFit(ctx, els.enName.value, textBox.w * 0.94, H * 0.06, H * 0.035, enFont, 400);
-  ctx.font = `400 ${enSize}px ${enFont}`;
-  ctx.fillStyle = '#5f4520';
-  ctx.fillText(els.enName.value, cx, textBox.y + textBox.h * 0.47);
-
-  const priceText = formatPrice(els.price.value);
-  const priceSize = fontSizeToFit(ctx, priceText, textBox.w * 0.9, H * (isLeft ? 0.20 : 0.13), H * 0.09, priceFont, 700);
-  ctx.font = `700 ${priceSize}px ${priceFont}`;
-  ctx.fillStyle = '#c80000';
-  ctx.fillText(priceText, cx, textBox.y + textBox.h * 0.73);
-
-  if (els.taxMode.value === 'tax') {
-    ctx.font = `600 ${Math.max(22, H * 0.043)}px ${jpFont}`;
-    ctx.fillStyle = '#111111';
-    ctx.fillText('（税込）', cx + textBox.w * 0.34, textBox.y + textBox.h * 0.76);
-    ctx.font = `400 ${Math.max(18, H * 0.034)}px ${enFont}`;
-    ctx.fillText('Tax included', cx + textBox.w * 0.27, textBox.y + textBox.h * 0.89);
-  }
-}
-
-function drawHandwritten(ctx, W, H) {
-  const pad = Math.round(W * 0.028);
-  ctx.fillStyle = '#fffdf8';
-  ctx.fillRect(0, 0, W, H);
-
-  ctx.strokeStyle = '#ed8fa6';
-  ctx.lineWidth = Math.max(7, W * 0.005);
-  ctx.setLineDash([W * 0.018, W * 0.007]);
-  roundedRect(ctx, pad, pad, W - pad * 2, H - pad * 2, 18);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // soft watercolor bands
-  ctx.globalAlpha = 0.18;
-  ctx.fillStyle = '#f6a7b8';
-  ctx.fillRect(W * 0.05, H * 0.05, W * 0.50, H * 0.035);
-  ctx.fillRect(W * 0.60, H * 0.86, W * 0.34, H * 0.03);
-  ctx.globalAlpha = 1;
-
-  const isLeft = els.imageLayout.value === 'left';
-  let imageBox, textBox;
-  if (isLeft) {
-    imageBox = { x: pad * 1.8, y: pad * 1.9, w: W * 0.49, h: H - pad * 3.8 };
-    textBox = { x: W * 0.56, y: pad * 2.0, w: W * 0.38, h: H - pad * 4 };
-  } else {
-    imageBox = { x: pad * 1.8, y: pad * 1.7, w: W - pad * 3.6, h: H * 0.49 };
-    textBox = { x: pad * 2.2, y: H * 0.56, w: W - pad * 4.4, h: H * 0.36 };
-  }
-
-  if (productImage) drawFittedImage(ctx, productImage, imageBox.x, imageBox.y, imageBox.w, imageBox.h, els.imageFit.value);
-
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const cx = textBox.x + textBox.w / 2;
-  const jpFont = '"Yu Gothic", "Hiragino Kaku Gothic ProN", sans-serif';
-  const enFont = '"Comic Sans MS", "Segoe Print", cursive';
-
-  const jpSize = fontSizeToFit(ctx, els.jpName.value, textBox.w * 0.98, H * (isLeft ? 0.13 : 0.095), H * 0.055, jpFont, 800);
-  ctx.font = `800 ${jpSize}px ${jpFont}`;
-  ctx.fillStyle = '#35251f';
-  ctx.fillText(els.jpName.value, cx, textBox.y + textBox.h * 0.21);
-
-  ctx.strokeStyle = '#ef9bae';
-  ctx.lineWidth = Math.max(8, W * 0.004);
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(textBox.x + textBox.w * 0.08, textBox.y + textBox.h * 0.35);
-  ctx.quadraticCurveTo(cx, textBox.y + textBox.h * 0.31, textBox.x + textBox.w * 0.92, textBox.y + textBox.h * 0.36);
-  ctx.stroke();
-
-  const enSize = fontSizeToFit(ctx, els.enName.value, textBox.w * 0.96, H * 0.055, H * 0.032, enFont, 400);
-  ctx.font = `400 ${enSize}px ${enFont}`;
-  ctx.fillStyle = '#3c2a23';
-  ctx.fillText(els.enName.value, cx, textBox.y + textBox.h * 0.48);
-
-  const priceText = formatPrice(els.price.value);
-  const priceSize = fontSizeToFit(ctx, priceText, textBox.w * 0.92, H * (isLeft ? 0.18 : 0.12), H * 0.085, enFont, 700);
-  ctx.font = `700 ${priceSize}px ${enFont}`;
-  ctx.fillStyle = '#d92945';
-  ctx.fillText(priceText, cx, textBox.y + textBox.h * 0.72);
-
-  if (els.taxMode.value === 'tax') {
-    ctx.font = `700 ${Math.max(22, H * 0.040)}px ${jpFont}`;
-    ctx.fillStyle = '#2b211d';
-    ctx.fillText('（税込）', cx + textBox.w * 0.34, textBox.y + textBox.h * 0.76);
-    ctx.font = `400 ${Math.max(18, H * 0.032)}px ${enFont}`;
-    ctx.fillText('Tax included', cx + textBox.w * 0.25, textBox.y + textBox.h * 0.89);
-  }
-}
-
-function render() {
-  setupCanvas();
-  const ctx = els.canvas.getContext('2d');
-  ctx.clearRect(0, 0, els.canvas.width, els.canvas.height);
-  if (els.template.value === 'handwritten') drawHandwritten(ctx, els.canvas.width, els.canvas.height);
-  else drawSimple(ctx, els.canvas.width, els.canvas.height);
-}
-
-function loadImageFromDataUrl(dataUrl) {
-  return new Promise((resolve, reject) => {
-    if (!dataUrl) return resolve(null);
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = dataUrl;
-  });
-}
-
-els.imageInput.addEventListener('change', (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = async () => {
-    productImageDataUrl = reader.result;
-    productImage = await loadImageFromDataUrl(productImageDataUrl);
-    render();
+  const aliases = {
+    code: ['商品コード','商品番号','品番','コード','item code','product code','code'],
+    jp: ['商品名','日本語商品名','日本語名','品名','product name','name'],
+    en: ['英語表記','英語名','英文商品名','英語商品名','english','english name','en'],
+    price: ['金額','価格','税込価格','販売価格','price','amount']
   };
-  reader.readAsDataURL(file);
-});
 
-['jpName','enName','price','taxMode','template','cardSize','imageLayout','imageFit'].forEach(id => {
-  els[id].addEventListener('input', render);
-  els[id].addEventListener('change', render);
-});
-
-els.exportBtn.addEventListener('click', () => {
-  render();
-  const a = document.createElement('a');
-  const safe = (els.jpName.value || 'price-card').replace(/[\\/:*?"<>|]/g, '_');
-  a.download = `${safe}.png`;
-  a.href = els.canvas.toDataURL('image/png');
-  a.click();
-});
-
-els.printBtn.addEventListener('click', () => {
-  render();
-  const s = SIZES[els.cardSize.value];
-  const dataUrl = els.canvas.toDataURL('image/png');
-  const win = window.open('', '_blank');
-  win.document.write(`<!doctype html><html><head><title>印刷</title><style>@page{size:${s.mmW}mm ${s.mmH}mm;margin:0}html,body{margin:0;padding:0}img{display:block;width:${s.mmW}mm;height:${s.mmH}mm}</style></head><body><img src="${dataUrl}" onload="window.print()"></body></html>`);
-  win.document.close();
-});
-
-els.resetBtn.addEventListener('click', () => {
-  els.jpName.value = '陶器セット　桜';
-  els.enName.value = 'Ceramic Set – Sakura';
-  els.price.value = 3800;
-  els.taxMode.value = 'tax';
-  els.template.value = 'simple';
-  els.cardSize.value = 'business';
-  els.imageLayout.value = 'left';
-  els.imageFit.value = 'contain';
-  els.imageInput.value = '';
-  productImage = null;
-  productImageDataUrl = '';
-  render();
-});
-
-function currentProduct() {
-  return {
-    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-    jpName: els.jpName.value,
-    enName: els.enName.value,
-    price: Number(els.price.value || 0),
-    taxMode: els.taxMode.value,
-    template: els.template.value,
-    cardSize: els.cardSize.value,
-    imageLayout: els.imageLayout.value,
-    imageFit: els.imageFit.value,
-    imageDataUrl: productImageDataUrl,
-    updatedAt: new Date().toISOString()
-  };
-}
-
-function setStatus(msg) {
-  els.status.textContent = msg;
-}
-
-function localProducts() {
-  try { return JSON.parse(localStorage.getItem('kobunshaPriceProducts') || '[]'); }
-  catch { return []; }
-}
-
-function saveLocalProduct(p) {
-  const list = localProducts();
-  list.unshift(p);
-  localStorage.setItem('kobunshaPriceProducts', JSON.stringify(list.slice(0, 200)));
-}
-
-async function initFirebase() {
-  if (!window.FIREBASE_CONFIG) return null;
-  try {
-    const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js');
-    const { getFirestore, collection, addDoc, getDocs, query, orderBy, limit } = await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js');
-    const app = initializeApp(window.FIREBASE_CONFIG);
-    const db = getFirestore(app);
-    return {
-      save: async (p) => addDoc(collection(db, 'priceCards'), p),
-      list: async () => {
-        const q = query(collection(db, 'priceCards'), orderBy('updatedAt', 'desc'), limit(200));
-        const snap = await getDocs(q);
-        return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      }
-    };
-  } catch (err) {
-    console.error(err);
-    setStatus('Firebase接続に失敗しました。ローカル保存を使用します。');
+  function normalize(s){ return String(s ?? '').trim().toLowerCase().replace(/[\s　_\-／/()（）]/g,''); }
+  function findKey(row, list){
+    const keys = Object.keys(row);
+    for (const k of keys){
+      const nk = normalize(k);
+      if (list.some(a => normalize(a) === nk)) return k;
+    }
     return null;
   }
-}
-
-async function refreshProducts() {
-  let list = [];
-  if (firebaseApi) {
-    try { list = await firebaseApi.list(); setStatus('Firebaseから商品一覧を読み込みました。'); }
-    catch (e) { console.error(e); setStatus('Firebaseの読み込みに失敗しました。'); }
-  } else {
-    list = localProducts();
-    setStatus('この端末に保存された商品一覧を読み込みました。');
+  function parsePrice(v){
+    if (typeof v === 'number') return Math.round(v);
+    const n = Number(String(v ?? '').replace(/[^0-9.\-]/g,''));
+    return Number.isFinite(n) ? Math.round(n) : 0;
   }
-  els.productSelect.innerHTML = '<option value="">選択してください</option>';
-  list.forEach((p, i) => {
-    const opt = document.createElement('option');
-    opt.value = String(i);
-    opt.textContent = `${p.jpName || '商品'} / ${formatPrice(p.price)}`;
-    opt.dataset.product = JSON.stringify(p);
-    els.productSelect.appendChild(opt);
-  });
-}
+  function sanitizeFileName(s){ return String(s || 'card').replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,' ').trim(); }
+  function money(n){ return Number(n || 0).toLocaleString('ja-JP'); }
 
-els.saveProductBtn.addEventListener('click', async () => {
-  const p = currentProduct();
-  if (firebaseApi) {
-    try { await firebaseApi.save(p); setStatus('Firebaseに商品を登録しました。'); }
-    catch (e) { console.error(e); setStatus('Firebaseへの保存に失敗しました。'); }
-  } else {
-    saveLocalProduct(p);
-    setStatus('この端末に商品を登録しました。');
+  async function readExcel(file){
+    try{
+      status.textContent = 'Excelを読み込んでいます…';
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      if (!rows.length) throw new Error('データ行がありません。');
+
+      const sample = rows[0];
+      const keyCode = findKey(sample, aliases.code);
+      const keyJp = findKey(sample, aliases.jp);
+      const keyEn = findKey(sample, aliases.en);
+      const keyPrice = findKey(sample, aliases.price);
+      if (!keyJp || !keyPrice) throw new Error('「商品名」と「金額」の列を確認してください。');
+
+      products = rows.map((r,i) => ({
+        id: i,
+        code: keyCode ? String(r[keyCode] ?? '').trim() : '',
+        jp: String(r[keyJp] ?? '').trim(),
+        en: keyEn ? String(r[keyEn] ?? '').trim() : '',
+        price: parsePrice(r[keyPrice])
+      })).filter(p => p.jp || p.code || p.price);
+
+      if (!products.length) throw new Error('有効な商品データが見つかりません。');
+      selectedIndex = 0;
+      searchInput.disabled = false;
+      searchInput.value = '';
+      computeGlobalSizes();
+      renderAll();
+      updateButtons();
+      status.textContent = `${products.length}件の商品を読み込みました。`;
+      localStorage.setItem('kobunsha-pricecard-last', JSON.stringify(products));
+    }catch(e){
+      console.error(e);
+      status.textContent = `読み込みエラー: ${e.message}`;
+    }
   }
-  refreshProducts();
-});
 
-els.refreshProductsBtn.addEventListener('click', refreshProducts);
-els.productSelect.addEventListener('change', async () => {
-  const opt = els.productSelect.selectedOptions[0];
-  if (!opt?.dataset.product) return;
-  const p = JSON.parse(opt.dataset.product);
-  els.jpName.value = p.jpName || '';
-  els.enName.value = p.enName || '';
-  els.price.value = p.price || 0;
-  els.taxMode.value = p.taxMode || 'tax';
-  els.template.value = p.template || 'simple';
-  els.cardSize.value = p.cardSize || 'business';
-  els.imageLayout.value = p.imageLayout || 'left';
-  els.imageFit.value = p.imageFit || 'contain';
-  productImageDataUrl = p.imageDataUrl || '';
-  productImage = await loadImageFromDataUrl(productImageDataUrl);
-  render();
-});
+  function renderAll(){
+    const q = normalize(searchInput.value);
+    filtered = products.filter(p => !q || normalize(`${p.code} ${p.jp} ${p.en}`).includes(q));
+    countText.textContent = `${filtered.length}件 / 全${products.length}件`;
+    renderTable(); renderCards();
+  }
 
-(async () => {
-  firebaseApi = await initFirebase();
-  render();
-  refreshProducts();
+  function renderTable(){
+    if(!filtered.length){ tableBody.innerHTML = '<tr><td colspan="5" class="empty">該当する商品がありません。</td></tr>'; return; }
+    tableBody.innerHTML = filtered.map(p => {
+      const actual = products.indexOf(p);
+      return `<tr class="${actual===selectedIndex?'selected':''}">
+        <td>${escapeHtml(p.code)}</td><td>${escapeHtml(p.jp)}</td><td>${escapeHtml(p.en)}</td>
+        <td class="price">¥${money(p.price)}</td><td><button class="row-btn" data-index="${actual}">選択</button></td></tr>`;
+    }).join('');
+    tableBody.querySelectorAll('.row-btn').forEach(b => b.onclick = () => selectProduct(Number(b.dataset.index)));
+  }
+
+  function renderCards(){
+    if(!filtered.length){ cardGrid.innerHTML = '<div class="empty-preview">表示する商品がありません。</div>'; return; }
+    cardGrid.innerHTML = '';
+    filtered.forEach(p => {
+      const actual = products.indexOf(p);
+      const wrap = document.createElement('div');
+      wrap.className = 'card-wrap' + (actual === selectedIndex ? ' selected' : '');
+      const canvas = document.createElement('canvas');
+      drawCard(canvas,p);
+      const meta = document.createElement('div');
+      meta.className = 'card-meta';
+      meta.innerHTML = `<span>${escapeHtml(p.code || 'コードなし')}</span><span>¥${money(p.price)}</span>`;
+      wrap.append(canvas,meta);
+      wrap.onclick = () => selectProduct(actual);
+      cardGrid.appendChild(wrap);
+    });
+  }
+
+  function selectProduct(i){ selectedIndex = i; renderTable(); renderCards(); updateButtons(); }
+  function updateButtons(){
+    const has = products.length > 0;
+    downloadSelected.disabled = !has || selectedIndex < 0;
+    downloadAll.disabled = !has;
+    printAll.disabled = !has;
+  }
+
+  function getCanvasSize(){
+    return ratioSelect.value === 'square' ? {w:1200,h:1200} : {w:1400,h:846};
+  }
+
+  function computeGlobalSizes(){
+    if(!products.length){ globalJpSize = null; globalEnSize = null; return; }
+    const {w} = getCanvasSize();
+    const tmp = document.createElement('canvas');
+    const ctx = tmp.getContext('2d');
+    const m = Math.round(w*0.035);
+    const jpMax = ratioSelect.value==='square' ? 120 : 105;
+    let minJp = jpMax*(w/1400);
+    let minEn = 54*(w/1400);
+    products.forEach(p => {
+      const js = fitText(ctx, p.jp, w-m*3, jpMax*(w/1400), 44*(w/1400));
+      if (js < minJp) minJp = js;
+      const es = fitLatin(ctx, p.en || '', w-m*3, 54*(w/1400), 28*(w/1400));
+      if (es < minEn) minEn = es;
+    });
+    globalJpSize = minJp;
+    globalEnSize = minEn;
+  }
+
+  function fitText(ctx,text,maxWidth,maxSize,minSize=28){
+    let size=maxSize;
+    while(size>minSize){ ctx.font = `700 ${size}px "Yu Mincho","Hiragino Mincho ProN",serif`; if(ctx.measureText(text).width<=maxWidth) break; size-=2; }
+    return size;
+  }
+
+  function drawCard(canvas,p){
+    const {w,h}=getCanvasSize(); canvas.width=w; canvas.height=h;
+    const ctx=canvas.getContext('2d');
+    const blue = designSelect.value === 'blue';
+    const border = blue ? '#174f85' : '#1b1b1b';
+    const secondary = blue ? '#174f85' : '#111';
+    const m = Math.round(w*0.035);
+    ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);
+    ctx.lineWidth = blue ? Math.max(7,w*0.006) : Math.max(2,w*0.002);
+    ctx.strokeStyle=border; ctx.strokeRect(m,m,w-2*m,h-2*m);
+
+    const codePx = Number(codeSize.value) * (w/420);
+    ctx.fillStyle=secondary; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    ctx.font=`500 ${codePx}px Georgia,"Times New Roman",serif`;
+    ctx.fillText(p.code || '',m*1.9,h*0.155);
+
+    if(blue){
+      ctx.strokeStyle=blue; ctx.lineWidth=Math.max(3,w*0.0025);
+      ctx.beginPath();ctx.moveTo(m*1.5,h*0.19);ctx.lineTo(w-m*1.5,h*0.19);ctx.stroke();
+    }
+
+    ctx.textAlign='center'; ctx.fillStyle='#050505';
+    const jpMax = ratioSelect.value==='square' ? 120 : 105;
+    const jpSize = globalJpSize ?? fitText(ctx,p.jp,w-m*3,jpMax*(w/1400),44*(w/1400));
+    ctx.font=`700 ${jpSize}px "Yu Mincho","Hiragino Mincho ProN",serif`;
+    const titleY = ratioSelect.value==='square' ? h*0.38 : h*0.43;
+    ctx.fillText(p.jp,w/2,titleY);
+
+    ctx.fillStyle=secondary; ctx.font=`500 ${54*(w/1400)}px Georgia,"Times New Roman",serif`;
+    const en = p.en || '';
+    const enSize = globalEnSize ?? fitLatin(ctx,en,w-m*3,54*(w/1400),28*(w/1400));
+    ctx.font=`500 ${enSize}px Georgia,"Times New Roman",serif`;
+    const enY=ratioSelect.value==='square'?h*0.49:h*0.56;
+    ctx.fillText(en,w/2,enY);
+
+    if(blue){
+      ctx.strokeStyle=blue;ctx.lineWidth=Math.max(3,w*0.0025);
+      const lineY=ratioSelect.value==='square'?h*0.55:h*0.62;
+      ctx.beginPath();ctx.moveTo(m*1.5,lineY);ctx.lineTo(w-m*1.5,lineY);ctx.stroke();
+    }
+
+    const pp = Number(priceSize.value)*(w/420);
+    const priceText=`¥${money(p.price)}`;
+    const priceY = ratioSelect.value==='square'?h*0.78:h*0.82;
+    ctx.font=`700 ${pp}px Georgia,"Times New Roman",serif`;
+    ctx.fillStyle='#d40000'; ctx.textAlign='center';
+    const priceWidth=ctx.measureText(priceText).width;
+    const taxFont=42*(w/1400);
+    ctx.font=`700 ${taxFont}px "Yu Mincho","Hiragino Mincho ProN",serif`;
+    const taxW=ctx.measureText('（税込）').width;
+    const totalW=priceWidth+taxW+24*(w/1400);
+    let startX=(w-totalW)/2;
+    ctx.font=`700 ${pp}px Georgia,"Times New Roman",serif`; ctx.textAlign='left';ctx.fillStyle='#d40000';
+    ctx.fillText(priceText,startX,priceY);
+    ctx.font=`700 ${taxFont}px "Yu Mincho","Hiragino Mincho ProN",serif`;ctx.fillStyle='#050505';
+    ctx.fillText('（税込）',startX+priceWidth+20*(w/1400),priceY-5*(w/1400));
+
+    ctx.font=`500 ${34*(w/1400)}px Georgia,"Times New Roman",serif`;ctx.fillStyle=secondary;ctx.textAlign='right';
+    ctx.fillText('Tax included',w-m*1.7,h-m*1.35);
+  }
+
+  function fitLatin(ctx,text,maxWidth,maxSize,minSize){
+    let size=maxSize; while(size>minSize){ctx.font=`500 ${size}px Georgia,"Times New Roman",serif`;if(ctx.measureText(text).width<=maxWidth)break;size-=2;}return size;
+  }
+
+  function escapeHtml(s){ return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+  function downloadBlob(blob,name){ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1200); }
+  function canvasToBlob(canvas){ return new Promise(resolve=>canvas.toBlob(resolve,'image/png',1)); }
+  function createCardCanvas(p){ const c=document.createElement('canvas');drawCard(c,p);return c; }
+
+  downloadSelected.onclick = async () => {
+    if(selectedIndex<0)return; const p=products[selectedIndex]; const c=createCardCanvas(p); const blob=await canvasToBlob(c);
+    downloadBlob(blob,`${sanitizeFileName(p.code||'商品')}_${sanitizeFileName(p.jp)}.png`);
+  };
+
+  downloadAll.onclick = async () => {
+    if(!products.length)return; status.textContent='PNGをZIPにまとめています…';
+    const zip=new JSZip();
+    for(let i=0;i<products.length;i++){
+      const p=products[i], c=createCardCanvas(p), blob=await canvasToBlob(c);
+      zip.file(`${String(i+1).padStart(3,'0')}_${sanitizeFileName(p.code||'商品')}_${sanitizeFileName(p.jp)}.png`,blob);
+    }
+    const out=await zip.generateAsync({type:'blob'});downloadBlob(out,'kobunsha_price_cards.zip');
+    status.textContent=`${products.length}枚のカードをZIP保存しました。`;
+  };
+
+  printAll.onclick = () => {
+    printArea.innerHTML=''; products.forEach(p=>printArea.appendChild(createCardCanvas(p))); window.print();
+  };
+
+  searchInput.oninput=renderAll;
+  [designSelect,ratioSelect,codeSize,priceSize].forEach(el=>el.addEventListener('input',()=>{codeSizeOut.value=codeSize.value;priceSizeOut.value=priceSize.value;if(el===ratioSelect)computeGlobalSizes();renderCards();}));
+  clearBtn.onclick=()=>{products=[];filtered=[];selectedIndex=-1;excelFile.value='';searchInput.value='';searchInput.disabled=true;countText.textContent='0件';tableBody.innerHTML='<tr><td colspan="5" class="empty">Excelを読み込むと商品一覧が表示されます。</td></tr>';cardGrid.innerHTML='<div class="empty-preview">読み込み後、ここにプライスカードが表示されます。</div>';status.textContent='Excelを読み込んでください。';updateButtons();localStorage.removeItem('kobunsha-pricecard-last');};
+  excelFile.onchange=e=>{if(e.target.files[0])readExcel(e.target.files[0]);};
+  ['dragenter','dragover'].forEach(n=>dropzone.addEventListener(n,e=>{e.preventDefault();dropzone.classList.add('drag');}));
+  ['dragleave','drop'].forEach(n=>dropzone.addEventListener(n,e=>{e.preventDefault();dropzone.classList.remove('drag');}));
+  dropzone.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)readExcel(f);});
+
+  codeSizeOut.value=codeSize.value; priceSizeOut.value=priceSize.value;
+  try{
+    const last=JSON.parse(localStorage.getItem('kobunsha-pricecard-last')||'null');
+    if(Array.isArray(last)&&last.length){products=last;selectedIndex=0;searchInput.disabled=false;computeGlobalSizes();renderAll();updateButtons();status.textContent=`前回の${products.length}件を復元しました。Excelを再読込すると置き換わります。`;}
+  }catch(_){}
 })();
