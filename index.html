@@ -1,114 +1,107 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#174f85">
   <title>弘文社 プライスカード作成</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="app-header">
-    <div>
-      <h1>弘文社 プライスカード作成</h1>
-      <p>商品写真・日本語名・英語名・価格を入力して、名刺サイズのカードを作成できます。</p>
+<header class="topbar">
+  <div>
+    <h1>弘文社 プライスカード作成</h1>
+    <p>Excelを読み込むだけで、商品名・英語表記・金額・商品コードからプライスカードを一括作成します。</p>
+  </div>
+</header>
+
+<main class="app">
+  <section class="panel controls">
+    <h2>1. Excelを読み込む</h2>
+    <div class="dropzone" id="dropzone">
+      <input id="excelFile" type="file" accept=".xlsx,.xls">
+      <strong>Excelファイルを選択</strong>
+      <span>または、ここへドラッグ＆ドロップ</span>
     </div>
-  </header>
+    <div class="actions compact">
+      <a class="button secondary" href="商品一覧テンプレート.xlsx" download>Excelテンプレート</a>
+      <button class="button ghost" id="clearBtn" type="button">読み込みを解除</button>
+    </div>
 
-  <main class="layout">
-    <section class="panel controls">
-      <h2>入力</h2>
+    <div class="mapping-note">
+      <strong>対応列</strong>
+      <p>商品コード / 商品番号 / 品番、商品名 / 日本語商品名、英語表記 / 英語名、金額 / 価格 / 税込価格</p>
+    </div>
 
-      <label class="field">
-        <span>商品写真</span>
-        <input id="imageInput" type="file" accept="image/*" />
+    <h2>2. デザイン</h2>
+    <div class="field-grid">
+      <label>
+        <span>デザイン</span>
+        <select id="designSelect">
+          <option value="simple">シンプル（黒枠）</option>
+          <option value="blue">ブルー（青枠）</option>
+        </select>
       </label>
-
-      <div class="grid-2">
-        <label class="field">
-          <span>日本語商品名</span>
-          <input id="jpName" type="text" value="陶器セット　桜" />
-        </label>
-        <label class="field">
-          <span>英語商品名</span>
-          <input id="enName" type="text" value="Ceramic Set – Sakura" />
-        </label>
-      </div>
-
-      <div class="grid-3">
-        <label class="field">
-          <span>価格</span>
-          <input id="price" type="number" min="0" step="1" value="3800" />
-        </label>
-        <label class="field">
-          <span>税込表示</span>
-          <select id="taxMode">
-            <option value="tax">税込 / Tax included</option>
-            <option value="none">表示なし</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>デザイン</span>
-          <select id="template">
-            <option value="simple">シンプル</option>
-            <option value="handwritten">手書き風</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="grid-3">
-        <label class="field">
-          <span>カードサイズ</span>
-          <select id="cardSize">
-            <option value="business">名刺 91×55mm</option>
-            <option value="a7">A7 105×74mm</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>写真レイアウト</span>
-          <select id="imageLayout">
-            <option value="left">左：写真 / 右：文字</option>
-            <option value="top">上：写真 / 下：文字</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>写真表示</span>
-          <select id="imageFit">
-            <option value="contain">全体を表示</option>
-            <option value="cover">カードいっぱい</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="button-row">
-        <button id="exportBtn" class="primary">PNG保存</button>
-        <button id="printBtn">印刷</button>
-        <button id="resetBtn">初期化</button>
-      </div>
-
-      <hr />
-      <h2>商品登録（任意）</h2>
-      <p class="hint">Firebaseを設定すると、商品情報をクラウド保存できます。未設定時はこの端末のブラウザに保存します。</p>
-      <div class="button-row">
-        <button id="saveProductBtn">現在の商品を登録</button>
-        <button id="refreshProductsBtn">一覧更新</button>
-      </div>
-      <label class="field">
-        <span>登録商品</span>
-        <select id="productSelect"><option value="">選択してください</option></select>
+      <label>
+        <span>カード比率</span>
+        <select id="ratioSelect">
+          <option value="business">名刺横 91×55mm</option>
+          <option value="square">正方形 1:1</option>
+        </select>
       </label>
-      <div id="status" class="status"></div>
-    </section>
+      <label>
+        <span>商品コード文字サイズ</span>
+        <input id="codeSize" type="range" min="18" max="42" value="28">
+        <output id="codeSizeOut">28</output>
+      </label>
+      <label>
+        <span>価格文字サイズ</span>
+        <input id="priceSize" type="range" min="62" max="110" value="88">
+        <output id="priceSizeOut">88</output>
+      </label>
+    </div>
 
-    <section class="panel preview-panel">
-      <h2>プレビュー</h2>
-      <div class="preview-shell">
-        <canvas id="cardCanvas" aria-label="プライスカードプレビュー"></canvas>
+    <h2>3. 出力</h2>
+    <div class="actions">
+      <button class="button primary" id="downloadSelected" type="button" disabled>選択カードをPNG保存</button>
+      <button class="button primary" id="downloadAll" type="button" disabled>全カードをZIP保存</button>
+      <button class="button secondary" id="printAll" type="button" disabled>A4にまとめて印刷</button>
+    </div>
+    <p class="hint">カードは高解像度PNGで保存します。A4印刷は名刺サイズの場合、1ページに10枚を目安に配置します。</p>
+    <div id="status" class="status">Excelを読み込んでください。</div>
+  </section>
+
+  <section class="panel workspace">
+    <div class="workspace-head">
+      <div>
+        <h2>商品一覧</h2>
+        <p id="countText">0件</p>
       </div>
-      <p class="hint">PNGは300dpi相当で書き出します。印刷時は「実際のサイズ / 100%」を推奨します。</p>
-    </section>
-  </main>
+      <input id="searchInput" class="search" type="search" placeholder="商品コード・商品名で検索" disabled>
+    </div>
 
-  <script src="firebase-config.js"></script>
-  <script type="module" src="app.js"></script>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>商品コード</th><th>商品名</th><th>英語表記</th><th>金額</th><th></th></tr>
+        </thead>
+        <tbody id="productTable">
+          <tr><td colspan="5" class="empty">Excelを読み込むと商品一覧が表示されます。</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 class="preview-title">プレビュー</h2>
+    <div id="cardGrid" class="card-grid">
+      <div class="empty-preview">読み込み後、ここにプライスカードが表示されます。</div>
+    </div>
+  </section>
+</main>
+
+<div id="printArea" aria-hidden="true"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
